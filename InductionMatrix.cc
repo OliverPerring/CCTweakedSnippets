@@ -1,316 +1,303 @@
 --[[
-  Wolfe's Mekanism Induction Matrix Monitor v2 (Receiver Module)
-  Usage: Put computer near Modem and Monitor (2x3 array should work fine) and install. Requires another computer transmitting matrix data over rednet to work.
-  Installation: pastebin run 3naSaR8X install
-  Configuration: Edit the "config" file, refer to the comments below for what each field means
+  Wolfe's Mekanism Induction Matrix Monitor
+  Usage: Put computer with code near an Induction Port and a monitor (2x3 array should work fine) and run.
+  Configuration: You can add a file called "config" with the options below, or append them to the command when running it via terminal:
+    energy_type = 'FE' -- Energy type you want to use
+    update_frequency = 1 -- Update frequency, in seconds
+    text_scale = 1 -- The text scale on the monitor, use 0.5 if you want to run on less displays
+    side_monitor = 'right' -- Hardcodes which side the monitor should be, defaults to auto-detection
+    side_inductor = 'back' -- Hardcodes which side the Induction Port should be, defaults to auto-detection
 ]]
-
--- Default settings, do not change
-local options = {
-  -- Unique identifier for the destination matrix on rednet
-  rednet_identifier = '',
-
-  -- Energy type being displayed (J, FE)
+ 
+-- 
+-- Usage: Put computer near an Induction Port and a monitor , set the sides below and run.
+ 
+-- Default settings
+options = {
   energy_type = 'FE',
-
-  -- Text scale on the monitor
+  update_frequency = 1,
   text_scale = 1,
-
-  -- Output debug data to the computer's internal display
-  debug = true,
 }
-
---------------------------------------------------
---- Internal variables, DO NOT CHANGE
---------------------------------------------------
-
---- This will be used as the installer source (Pastebin)
-local INSTALLER_ID = '3naSaR8X'
-
---- Supported energy suffixes
-local energy_suffixes = { 'k', 'M', 'G', 'T', 'P' }
-
---- Supported time periods when converting seconds
-local time_periods = {
-  { 'weeks', 604800 },
-  { 'days', 86400 },
-  { 'hours', 3600 },
-  { 'minutes', 60 },
-  { 'seconds', 1 },
-}
-
---- This is our Induction Matrix, we'll auto-detect it later
-local induction_matrix = nil
-
---- This is our Monitor, we'll auto-detect it later
-local monitor = nil
-
---- This is our Modem, we'll auto-detect it later
-local modem = nil
-
---- Prefix used for rednet channels
-local rednet_prefix = 'WL_Mek_Matrix'
-
---------------------------------------------------
---- Helper functions
---------------------------------------------------
-
---- Reads a file's contents
----@return string
-function file_read (file)
-  local handle = fs.open(file, 'r')
-  local data = handle.readAll()
-  handle.close()
-  return data
-end
-
---- Writes data to a file (overrides existing data)
-function file_write (file, data)
-  local handle = fs.open(file, 'w')
-  handle.write(data)
+ 
+-- Loads custom options from file (if available)
+if fs.exists('config') then
+  -- Opens the file for reading
+  local handle = fs.open('config')
+ 
+  -- Reads configs
+  raw_options = {}
+  local line = handle.readLine()
+  while line do
+    table.insert(raw_options, line)
+    line = handle.readLine()
+  end
+ 
+  -- Sets custom options
+  custom_options = string.format('{%s}', table.concat(raw_options, '\n,'))
+ 
+  -- Closes the handle properly
   handle.close()
 end
-
---- Holds the current buffer of data being printed
-local machine_term = term.current()
-local print_buffer = {}
-
---- Writes data to the output monitor buffer
-function print_r (text)
-  table.insert(print_buffer, text)
+ 
+-- Gets custom settings via arguments
+args = {...}
+if args and #args > 0 then
+  -- Parses custom settings from args
+  custom_options = string.format('{%s}', table.concat(args, '\n,'))
 end
-
---- Writes formatted data to the output monitor buffer
-function print_f (format, ...)
-  print_r(string.format(format, ...))
+ 
+-- Detects custom options
+if custom_options then
+  -- Debug only
+  print('Running with custom options:')
+ 
+  -- Makes sure we're dealing with a table to prevent code injection
+  if '{' == custom_options:sub(1, 1) then
+    -- Parses the object
+    custom_options, err = loadstring(string.format('return %s', custom_options))
+ 
+    -- Handles invalid object
+    if not custom_options then
+      print('Invalid options:')
+      print(err)
+    else
+      -- Replaces settings
+      for k, v in pairs(custom_options()) do
+        print(string.format('%s = %s', k, v))
+        options[k] = v
+      end
+    end
+  end
 end
-
---- Writes the buffer into the output monitor
-function print_flush ()
-  -- Redirects writes to monitor (if any)
-  term.redirect(monitor)
-
+ 
+-- Auto-detects sides
+for _, side in pairs(peripheral.getNames()) do
+  -- Auto-detects monitor
+  if 'monitor' == peripheral.getType(side) and (not options.side_monitor) then
+    options.side_monitor = side
+  end
+ 
+  -- Auto-detects Induction Port
+  if 'inductionPort' == peripheral.getType(side) and (not options.side_inductor) then
+    options.side_inductor = side
+  end
+end
+ 
+-- Connects to Peripherals
+monitor = peripheral.wrap(options.side_monitor)
+ 
+-- Queues a new print command to be sent
+buffer = {}
+function queue (text)
+  table.insert(buffer, text)
+end
+ 
+-- Queues a new print command with string.format
+function queuef (fmt, ...)
+  queue(string.format(fmt, ...))
+end
+ 
+-- Flushes (prints) buffer content
+function queue_flush ()
   -- Clears terminal
   term.clear()
   term.setCursorPos(1, 1)
-
+ 
   -- Writes new data
-  print(table.concat(print_buffer or {}, '\n'))
-
-  -- Redirects writes back to computer (if using monitor)
-  term.redirect(machine_term)
-
-  -- Clears buffer
-  print_buffer = {}
+  print(table.concat(buffer, '\n'))
+  buffer = {}
 end
-
---- Writes debug info to the machine
-function debug (...)
-  if options.debug then
-    print(...)
-  end
-end
-
---- Rounds a number with N decimals
-function round_decimal (number, decimals)
-  local multiplier = math.pow(10, decimals or 0)
-  return math.floor(number * multiplier) / multiplier
-end
-
---- Rounds a percentage (0..1) to a number of decimals
-function round_percentage (number, decimals)
-  return ('%s%%'):format(round_decimal(100 * number, decimals or 1))
-end
-
---- The current energy type
-local energy_type = 'J'
-
---- Converts energy values
-local energy_convert = function (energy) return energy end
-if mekanismEnergyHelper and mekanismEnergyHelper[('joulesTo%s'):format(options.energy_type)] then
-  energy_type = options.energy_type
-  energy_convert = mekanismEnergyHelper[('joulesTo%s'):format(options.energy_type)]
-end
-
---- Prints an energy value
-local energy_string = function (energy, decimals)
-  local prefix = ''
-  local suffix = ''
-
-  -- Prepares a prefix for negative numbers
-  if energy < 0 then
-    prefix = '-'
-  end
-
-  -- We need a positive number here for calculating multipliers (k, M, G, T), we'll add the minus later, we also convert it to the right unit
-  local amount = energy_convert(math.abs(energy))
-
-  -- Finds the proper suffix/multiplier
-  for _, multiplier in pairs(energy_suffixes) do
-    -- Stops when amount is less than 1000
-    if amount < 1000 then
-      break
-    end
-
-    -- Updates suffix and amount to new value
-    amount = amount / 1000
-    suffix = multiplier
-  end
-
-  -- Returns the formatted string
-  return ('%s%s%s%s'):format(prefix, round_decimal(amount, decimals or 1), suffix, energy_type)
-end
-
---- Generates an ETA string when given a number of seconds
-function eta_string (seconds)
-  -- Makes sure we're only dealing with integers
-  seconds = math.floor(seconds)
-
-  -- Processes time periods
-  local time = {}
-  for _, period in pairs(time_periods) do
-    local count = math.floor(seconds / period[2])
-    time[period[1]] = count
-    seconds = seconds - (count * period[2])
-  end
-
+ 
+-- Formats time
+function time (secs)
+  -- Prepare value
+  secs = math.floor(secs)
+ 
+  -- Days
+  local weeks = math.floor(secs / 604800)
+  secs = secs - (604800 * weeks)
+ 
+  -- Days
+  local days = math.floor(secs / 86400)
+  secs = secs - (86400 * days)
+ 
+  -- Hours
+  local hours = math.floor(secs / 3600)
+  secs = secs - (3600 * hours)
+ 
+  -- Minutes
+  local mins = math.floor(secs / 60)
+  secs = secs - (60 * mins)
+ 
   -- If we have more than 72h worth of storage, switch to week, day, hour format
-  if time.weeks > 0 then
-    return ('%dwk %dd %dh'):format(time.weeks, time.days, time.hours)
-  elseif time.days >= 3 then
-    return ('%dd %dh'):format(time.days, time.hours)
+  if weeks > 0 then
+    return string.format('%dwk %dd %dh', weeks, days, hours)
+  elseif days >= 3 then
+    return string.format('%dd %dh', days, hours)
   end
-
-  -- For all other cases, we'll just use H:MM:SS
-  return ('%d:%02d:%02d'):format(time.hours, time.minutes, time.seconds)
+ 
+  -- Formatting to have trailing zeros on H:MM:SS 
+  return string.format('%d:%02d:%02d', hours, mins, secs)
 end
-
---- Prints the Induction Matrix information
-function print_matrix_info (matrix_info)
-  print_r('Ind.Matrix Monitor')
-  print_r('------------------')
-  print_r('')
-  print_f('Power : %s', energy_string(matrix_info.energy_stored))
-  print_f('Limit : %s', energy_string(matrix_info.energy_capacity))
-  print_f('Charge: %s', round_percentage(matrix_info.energy_percentage))
-  print_r('')
-  print_f('Input : %s/t', energy_string(matrix_info.io_input))
-  print_f('Output: %s/t', energy_string(matrix_info.io_output))
-  print_f('Max IO: %s/t', energy_string(matrix_info.io_capacity))
-  print_r('')
-
-  -- If we have negative value here, we'll save a character by removing the space so it fits same line
-  if matrix_info.change_amount < 0 then
-    print_f('Change:%s/s', energy_string(matrix_info.change_amount_per_second))
+ 
+-- Rounds number
+function rnd (val, dec)
+  local X = math.pow(10, dec)
+  return math.floor(val * X) / X
+end
+ 
+-- Converts to percentage
+function pct (val, dec)
+  return rnd(100 * val, dec or 1) .. '%'
+end
+ 
+-- Converts to readable power
+function pwr (val, dec)
+  local pre = ''
+  local suf = ''
+ 
+  local is_neg = false
+  if val < 0 then
+    pre = '-'
+    is_neg = true
+    val = -val
+  end
+  
+  val = energy_function(val)
+  
+  if val > 1000 then
+    suf = 'k'
+    val = val / 1000
+  end
+  
+  if val > 1000 then
+    suf = 'M'
+    val = val / 1000
+  end
+  
+  if val > 1000 then
+    suf = 'G'
+    val = val / 1000
+  end
+  
+  if val > 1000 then
+    suf = 'T'
+    val = val / 1000
+  end
+  
+  return string.format('%s%s%s%s', pre, rnd(val, dec or 1), suf, energy_type)
+end
+ 
+-- Checks induction port
+function check_connection ()
+  return inductor and inductor.getEnergy and inductor.getLastInput
+end
+ 
+-- Detects energy type, sets energy function
+energy_type = options.energy_type
+energy_function = mekanismEnergyHelper[string.format('joulesTo%s', energy_type)]
+ 
+-- Function not found, use default Joules and a stub
+if not energy_function then
+  energy_type = 'J'
+  energy_function = function (val) return val end
+end
+ 
+-- Starts monitor
+term.redirect(monitor)
+monitor.setTextScale(options.text_scale)
+ 
+-- Checks if Inductor Port is missing or multiblock not ready
+inductor = peripheral.wrap(options.side_inductor)
+while not check_connection() do
+  -- Writes error message
+  queue('Ind.Port not found')
+  queue('Check connections.')
+  queue('Waiting...')
+ 
+  -- Prints
+  queue_flush()
+  
+  -- Wait for next update
+  os.sleep(options.update_frequency)
+ 
+  -- Tries to detect port
+  if not options.side_inductor then
+    for _, side in pairs(peripheral.getNames()) do
+      -- Tries to find an induction port
+      if 'inductionPort' == peripheral.getType(side) then
+        options.side_inductor = side
+        inductor = peripheral.wrap(options.side_inductor)
+      end
+    end
   else
-    print_f('Change: %s/s', energy_string(matrix_info.change_amount_per_second))
-  end
-
-  -- Charge/discharge status
-  print_r('Status:')
-  if matrix_info.is_charging then
-    print_f('Charg. %s', eta_string((matrix_info.energy_capacity - matrix_info.energy_stored) / matrix_info.change_amount_per_second))
-  elseif matrix_info.is_discharging then
-    print_f('Disch. %s', eta_string(matrix_info.energy_stored / math.abs(matrix_info.change_amount_per_second)))
-  else
-    print_r('Idle')
+    -- Try again on pre-set port
+    inductor = peripheral.wrap(options.side_inductor)
   end
 end
-
---------------------------------------------------
---- Program initialization
---------------------------------------------------
-
-args = {...}
-
--- Loads custom options from filesystem
-if fs.exists('config') then
-  debug('Loading settings from "config" file...')
-
-  -- Reads custom options
-  local custom_options = textutils.unserialize(file_read('config'))
-
-  -- Overrides each of the existing options
-  for k, v in pairs(custom_options) do
-    options[k] = v
-  end
-end
-
--- Writes back config file
-print('Updating config file...')
-file_write('config', textutils.serialize(options))
-
--- Handles special case when "install" is executed from the pastebin
-if 'install' == args[1] then
-  print('Installing Matrix Monitor (Receiver Module)...')
-
-  -- Are we on first install? If so, we'll run open the config for editing later
-  local has_existing_install = fs.exists('startup.lua')
-
-  -- Removes existing version
-  if fs.exists('startup.lua') then
-    fs.delete('startup.lua')
-  end
-
-  -- Downloads script from Pastebin
-  shell.run('pastebin', 'get', INSTALLER_ID, 'startup.lua')
-
-  -- Runs config editor
-  if not has_existing_install then
-    print('Opening config file for editing...')
-    sleep(2.5)
-    shell.run('edit', 'config')
-  end
-
-  -- Reboots the computer after everything is done
-  print('Install complete! Restarting computer...')
-  sleep(2.5)
-  os.reboot()
-end
-
--- Detects peripherals
-monitor = peripheral.find('monitor')
-modem = peripheral.find('modem')
-
---- The rednet channel/protocol we'll be using
-local rednet_channel = nil
-
--- Makes sure we have a connected monitor
-if monitor then
-  monitor.setTextScale(options.text_scale)
-else
-  error('No monitor detected!')
-end
-
--- Makes sure we have a connected modem
-if modem then
-  if not options.rednet_identifier or options.rednet_identifier == '' then
-    error('Modem has been found, but no wireless identifier found on configs!')
-  end
-
-  peripheral.find('modem', rednet.open)
-  debug('Connected to rednet!')
-  rednet_channel = ('%s#%s'):format(rednet_prefix, options.rednet_identifier)
-else
-  error('No modem detected!')
-end
-
---------------------------------------------------
---- Main runtime
---------------------------------------------------
-
-debug('Entering main loop...')
-
+ 
+-- Initializes balance
+balance = inductor.getEnergy()
 while true do
-  -- Receives next update
-  local id, message = rednet.receive(rednet_channel)
-
-  -- Parses message
-  local matrix_info = textutils.unserialize(message)
-
-  -- Prints the matrix information
-  print_matrix_info(matrix_info)
-
-  -- Outputs text to screen
-  print_flush()
+  local status, err = pcall(function () 
+    -- Main script
+    queue('Ind.Matrix Monitor')
+    queue('------------------')
+    queue('')
+    queuef('Power : %s', pwr(inductor.getEnergy()))
+    queuef('Limit : %s', pwr(inductor.getMaxEnergy()))
+    queuef('Charge: %s', pct(inductor.getEnergyFilledPercentage()))
+    queue('')
+    queuef('Input : %s', pwr(inductor.getLastInput()))
+    queuef('Output: %s', pwr(inductor.getLastOutput()))
+    queuef('Max IO: %s/t', pwr(inductor.getTransferCap()))
+    queue('')
+    
+    -- Power balance per second
+    local balance_last = balance
+    balance = inductor.getEnergy()
+    local balance_change = (balance - balance_last) / options.update_frequency
+    
+    -- If we have negative value here, we'll save a character by removing the space so it fits same line
+    if balance_change < 0 then
+      queuef('Change:%s/s', pwr(balance_change))
+    else
+      queuef('Change: %s/s', pwr(balance_change))
+    end
+ 
+    -- Status (charged/depleted in)
+    queue('Status:')
+    if balance_change > 0 then
+      -- Charging
+      local remaining_charge = inductor.getMaxEnergy() - inductor.getEnergy()
+      local seconds_remaining = remaining_charge / balance_change
+      queuef('Charg. %s', time(seconds_remaining))
+    elseif balance_change < 0 then
+      -- Discharging
+      local remaining_charge = inductor.getEnergy()
+      local seconds_remaining = remaining_charge / -balance_change
+      queuef('Disch. %s', time(seconds_remaining))
+    else
+      -- No changes, so we won't be charged or depleted, rare.
+      queue('Idle')
+    end
+  end)
+ 
+  -- Checks for errors (might be disconnected)
+  if not status then
+    -- Clears buffer first
+    buffer = {}
+ 
+    -- Shows error message
+    queue('Error reading data')
+    queue('Check connections.')
+    queue('------------------')
+    queue(err)
+  end
+ 
+  -- Prints
+  queue_flush()
+  
+  -- Wait for next update
+  os.sleep(options.update_frequency)
 end
