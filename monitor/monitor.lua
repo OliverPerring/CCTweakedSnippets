@@ -2,7 +2,7 @@
 rednet.open("bottom")
 
 -- Initialize the advanced monitor
-local monitor = peripheral.wrap("right") -- Change "right" to the side your monitor is connected to
+local monitor = peripheral.wrap("top") -- Change "right" to the side your monitor is connected to
 monitor.setTextScale(1) -- Adjust text size as needed
 monitor.clear()
 
