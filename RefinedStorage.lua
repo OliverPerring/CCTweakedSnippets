@@ -1,526 +1,284 @@
-rs = peripheral.find("rsBridge")
-monitor = peripheral.find('monitor')
+-- Sleep to let the pack start fully
+sleep(5)
+local monitors = {peripheral.find("monitor")}
 
-term.redirect(monitor)
+local topMonitor = monitors[1]  -- Main top monitor
+local rightMonitor = monitors[2]  -- Modem-connected right monitor
+local leftMonitor = monitors[3]  -- Left monitor (if needed later)
 
-selectedItem = nil
-
-charMap = {
-    ["A"] = {
-        "0110",
-        "1001",
-        "1111",
-        "1001",
-        "1001"
-    },
-    ["B"] = {
-        "1110",
-        "1001",
-        "1110",
-        "1001",
-        "1110"
-    },
-    ["C"] = {
-        "0111",
-        "1000",
-        "1000",
-        "1000",
-        "0111"
-    },
-    ["D"] = {
-        "1110",
-        "1001",
-        "1001",
-        "1001",
-        "1110"
-    },
-    ["E"] = {
-        "1111",
-        "1000",
-        "1111",
-        "1000",
-        "1111"
-    },
-    ["F"] = {
-        "1111",
-        "1000",
-        "1111",
-        "1000",
-        "1000"
-    },
-    ["G"] = {
-        "0111",
-        "1000",
-        "1011",
-        "1001",
-        "0111"
-    },
-    ["H"] = {
-        "1001",
-        "1001",
-        "1111",
-        "1001",
-        "1001"
-    },
-    ["I"] = {
-        "111",
-        "010",
-        "010",
-        "010",
-        "111"
-    },
-    ["J"] = {
-        "111",
-        "001",
-        "001",
-        "101",
-        "010"
-    },
-    ["K"] = {
-        "1001",
-        "1010",
-        "1100",
-        "1010",
-        "1001"
-    },
-    ["L"] = {
-        "1000",
-        "1000",
-        "1000",
-        "1000",
-        "1111"
-    },
-    ["M"] = {
-        "10001",
-        "11011",
-        "10101",
-        "10001",
-        "10001"
-    },
-    ["N"] = {
-        "10001",
-        "11001",
-        "10101",
-        "10011",
-        "10001"
-    },
-    ["O"] = {
-        "0110",
-        "1001",
-        "1001",
-        "1001",
-        "0110"
-    },
-    ["P"] = {
-        "1110",
-        "1001",
-        "1110",
-        "1000",
-        "1000"
-    },
-    ["Q"] = {
-        "0110",
-        "1001",
-        "1011",
-        "1001",
-        "0111"
-    },
-    ["R"] = {
-        "1110",
-        "1001",
-        "1110",
-        "1010",
-        "1001"
-    },
-    ["S"] = {
-        "0111",
-        "1000",
-        "0110",
-        "0001",
-        "1110"
-    },
-    ["T"] = {
-        "11111",
-        "00100",
-        "00100",
-        "00100",
-        "00100"
-    },
-    ["U"] = {
-        "1001",
-        "1001",
-        "1001",
-        "1001",
-        "0110"
-    },
-    ["V"] = {
-        "1001",
-        "1001",
-        "1001",
-        "0101",
-        "0010"
-    },
-    ["W"] = {
-        "10001",
-        "10001",
-        "10101",
-        "11011",
-        "10001"
-    },
-    ["X"] = {
-        "10001",
-        "01010",
-        "00100",
-        "01010",
-        "10001"
-    },
-    ["Y"] = {
-        "10001",
-        "01010",
-        "00100",
-        "00100",
-        "00100"
-    },
-    ["Z"] = {
-        "1111",
-        "0001",
-        "0010",
-        "0100",
-        "1111"
-    },
-    ["0"] = {
-        "0110",
-        "1001",
-        "1001",
-        "1001",
-        "0110"
-    },
-    ["1"] = {
-        "010",
-        "110",
-        "010",
-        "010",
-        "111"
-    },
-    ["2"] = {
-        "1110",
-        "0001",
-        "0110",
-        "1000",
-        "1111"
-    },
-    ["3"] = {
-        "1110",
-        "0001",
-        "0110",
-        "0001",
-        "1110"
-    },
-    ["4"] = {
-        "1001",
-        "1001",
-        "1111",
-        "0001",
-        "0001"
-    },
-    ["5"] = {
-        "1111",
-        "1000",
-        "1110",
-        "0001",
-        "1110"
-    },
-    ["6"] = {
-        "0111",
-        "1000",
-        "1110",
-        "1001",
-        "0110"
-    },
-    ["7"] = {
-        "1111",
-        "0001",
-        "0010",
-        "0100",
-        "0100"
-    },
-    ["8"] = {
-        "0110",
-        "1001",
-        "0110",
-        "1001",
-        "0110"
-    },
-    ["9"] = {
-        "0110",
-        "1001",
-        "0111",
-        "0001",
-        "0110"
-    },
-    [":"] = {
-        "0",
-        "1",
-        "0",
-        "1",
-        "0"
-    },
-    [" "] = {
-        "0",
-        "0",
-        "0",
-        "0",
-        "0"
-    }
-}
-
--- Calculate dynamic scaling based on monitor size
-function calculateScaling()
-    monitorWidth, monitorHeight = monitor.getSize()
-
-    targetWidth = 9
-    targetHeight = 5
-
-    local textScaleX = monitorWidth / (targetWidth * 6)
-    local textScaleY = monitorHeight / (targetHeight * 3)
-
-    scale = math.min(textScaleX, textScaleY)
-    scale = math.max(0.75, math.min(1, scale))
-    monitor.setTextScale(scale)
-
-    w, h = monitor.getSize()
-
-    boxWidth = math.floor(w / targetWidth)
-    boxHeight = math.floor(h / targetHeight)
-    boxesPerRow = math.floor(w / boxWidth)
-    rows = math.floor(h / boxHeight) - 1  -- Leave room for ticker
+-- Set up peripherals
+local rs = nil  -- Explicitly define rs to avoid nil errors
+while not rs do
+    rs = peripheral.find("rsBridge")
+    if not rs then
+        if topMonitor then
+            term.redirect(topMonitor)
+            term.setBackgroundColor(colors.black)
+            term.clear()
+            term.setCursorPos(1, 1)
+            term.setTextColor(colors.red)
+            term.write("Waiting for Refined Storage...")
+        end
+        sleep(2)
+    end
 end
 
--- Render a character at (x,y) using a 5x7 grid
-function drawChar(x, y, char, size, color)
-    local pixels = charMap[char]
-    if not pixels then return end  -- Skip if character isn't mapped
+-- Clear right and left monitors if they exist
+if rightMonitor then
+    term.redirect(rightMonitor)
+    term.setBackgroundColor(colors.black)
+    term.clear()
+end
 
-    term.setBackgroundColor(color)
+if leftMonitor then
+    term.redirect(leftMonitor)
+    term.setBackgroundColor(colors.black)
+    term.clear()
+end
 
-    for row = 1, #pixels do
-        for col = 1, #pixels[row] do
-            if pixels[row]:sub(col, col) == "1" then
-                paintutils.drawBox(
-                    x + (col - 1) * size,
-                    y + (row - 1) * size,
-                    x + col * size - 1,
-                    y + row * size - 1
-                )
+-- Default to top monitor for now
+term.redirect(topMonitor)
+
+-- Color Palette
+local backgroundColor = colors.black
+local borderColor = colors.cyan
+local itemColor = colors.lightGray
+local amountColor = colors.orange
+local lowStockColor = colors.red
+local headerColor = colors.blue
+local increaseColor = colors.green
+local decreaseColor = colors.red
+local batteryColor = colors.green
+local batteryLowColor = colors.red
+local batteryFrameColor = colors.gray
+local fluidBarColor = colors.blue
+local fluidEmptyColor = colors.gray
+
+local itemHistory = {}
+local arrowHistory = {}
+local arrowColorHistory = {}
+
+-- Scaling and Layout
+function calculateScaling()
+    topMonitor.setTextScale(1.8)  -- Increased text scale for better readability
+    w, h = topMonitor.getSize()
+end
+
+-- Draw battery status on bottom monitor
+function drawBattery()
+    if leftMonitor then
+        term.redirect(leftMonitor)
+        leftMonitor.setTextScale(1.0)  -- Reset to ensure correct scaling
+        local lw, lh = leftMonitor.getSize()
+        term.redirect(leftMonitor)
+        term.setBackgroundColor(colors.black)
+        
+        local energy = rs.getEnergyStorage()
+        local maxEnergy = rs.getMaxEnergyStorage()
+        local energyUsage = rs.getEnergyUsage()
+        
+        -- Display battery status text
+        local statusText = string.format("FE Status: %d FE / %d FE Usage: %d FE", energy, maxEnergy, energyUsage)
+        local startX = math.floor((lw - #statusText) / 2) + 1
+        term.setCursorPos(startX, 1)
+        term.setTextColor(colors.white)
+        term.write(statusText)
+        
+        local barWidth = 35
+        local barHeight = 2
+        local fill = math.floor((energy / maxEnergy) * barWidth)
+        local batteryX = math.floor(lw / 2) - math.floor(barWidth / 2)
+        local batteryY = math.floor(lh / 2)
+
+        -- Draw battery frame
+        paintutils.drawBox(batteryX, batteryY, batteryX + barWidth, batteryY + barHeight, batteryFrameColor)
+        
+        -- Draw battery fill
+        local color = energy / maxEnergy < 0.2 and batteryLowColor or batteryColor
+        paintutils.drawBox(batteryX + 1, batteryY + 1, batteryX + fill, batteryY + barHeight - 1, color)
+        paintutils.drawBox(batteryX + fill + 1, batteryY + 1, batteryX + barWidth - 1, batteryY + barHeight - 1, batteryLowColor)
+               
+        end
+end
+
+-- Draw Item monitoring on right monitor
+local itemHistoryGraph = {}
+local barColorHistory = {}
+local previousItemCount = 0
+local maxGraphHeight = 6  -- Max height for right monitor graph
+
+function drawItemGraph()
+    if rightMonitor then
+        term.redirect(rightMonitor)
+        rightMonitor.setTextScale(0.6)
+        local rw, rh = rightMonitor.getSize()
+        term.setBackgroundColor(colors.black)
+        term.clear()
+        
+        -- Get total item count
+        local totalItemCount = 0
+        local rsitems = rs.listItems() or {}
+        for _, item in pairs(rsitems) do
+            totalItemCount = totalItemCount + item.amount
+        end
+        
+        -- Calculate difference from previous total
+        local difference = totalItemCount - previousItemCount
+        previousItemCount = totalItemCount
+        
+        -- Store item count and bar color in history
+        local scaleFactor = 10  -- Adjust scaling for better visibility
+        local scaledDifference = math.floor(difference * scaleFactor)
+        
+        -- Insert into history and apply color based on direction
+        table.insert(itemHistoryGraph, scaledDifference)
+        table.insert(barColorHistory, difference >= 0 and increaseColor or decreaseColor)
+
+        if #itemHistoryGraph > rw then
+            table.remove(barColorHistory, 1)
+            table.remove(itemHistoryGraph, 1)
+        end
+        
+        -- Draw graph bars
+        local maxAmount = math.max(10, unpack(itemHistoryGraph))
+        local barSpacing = math.max(1, math.floor(rw / maxGraphHeight))
+        for i = math.max(1, #itemHistoryGraph - rw + 1), #itemHistoryGraph do
+            local barX = rw - (#itemHistoryGraph - i) + 1
+            local barHeight = math.floor((itemHistoryGraph[i] / maxAmount) * (rh * 0.8))
+            local barColor = barColorHistory[i - math.max(1, #itemHistoryGraph - rw + 1) + 1] or increaseColor
+            term.setBackgroundColor(barColor)  -- Cap at 80% height
+            
+            for y = rh, rh - barHeight + 1, -1 do
+                term.setCursorPos(barX, y)
+                term.write(" ")
             end
         end
+
+        
+        -- Display total item count
+        term.setCursorPos(1, 1)
+        term.setTextColor(colors.white)
     end
 end
 
--- Draw text using the char map
-function drawLargeText(x, y, text, size, color)
-    for i = 1, #text do
-        local char = text:sub(i, i)
-        drawChar(x + (i - 1) * (6 * size), y, char, size, color)
+-- Draw header
+function drawHeader(text)
+    term.setBackgroundColor(headerColor)
+    term.clearLine()
+    term.setCursorPos(1, 1)
+    term.setTextColor(colors.white)
+    term.write(text)
+end
+
+-- Draw footer
+function drawFooter()
+    term.setBackgroundColor(headerColor)
+    term.setCursorPos(1, h)
+    term.clearLine()
+    term.setTextColor(colors.white)
+    term.write(" Updated: " .. os.date("%X"))
+end
+
+-- Draw separator line
+function drawSeparator(y)
+    paintutils.drawLine(1, y, w, y, borderColor)
+end
+
+-- Draw item row with persistent up/down indicator and color
+function drawItemRow(y, itemName, itemAmount)
+    if y < h then  -- Prevent overwriting the footer
+        local previousAmount = itemHistory[itemName] or itemAmount
+        local arrow = arrowHistory[itemName] or " "
+        local textColor = itemColor
+        local arrowColor = arrowColorHistory[itemName] or amountColor
+
+        if itemAmount < 100 then
+            textColor = lowStockColor
+        end
+
+        if itemAmount > previousAmount then
+            arrow = "^"
+            arrowColor = increaseColor
+        elseif itemAmount < previousAmount then
+            arrow = "v"
+            arrowColor = decreaseColor
+        end
+
+        itemHistory[itemName] = itemAmount
+        arrowHistory[itemName] = arrow
+        arrowColorHistory[itemName] = arrowColor
+
+        term.setCursorPos(2, y)
+        term.setBackgroundColor(backgroundColor)
+        term.clearLine()
+        term.setTextColor(textColor)
+        term.write(itemName:gsub("[%[%]]", ""))  -- Remove brackets
+
+        term.setCursorPos(w - #tostring(itemAmount) - 3, y)
+        term.setTextColor(amountColor)
+        term.write(tostring(itemAmount) .. " ")
+        term.setTextColor(arrowColor)
+        term.write(arrow)
     end
 end
 
--- Shorten item names
-function shortenItemName(name)
-    name = name:gsub("[%[%]]", "")
+-- Display items in list format with smooth scrolling
+function displayList()
+	term.redirect(topMonitor)
+    term.setBackgroundColor(backgroundColor)
+    term.clear()
 
-    if name:match("Ingot") then
-        return name:gsub("Ingot", "I")
-    elseif name:match("Raw") then
-        return name:gsub("Raw", "R")
-    elseif name:match("Ore") then
-        return name:gsub("Ore", "O")
-    elseif name:match("Essence") then
-        return name:gsub("Essence", "E")
-    elseif name:match("Nether") then
-        return name:gsub("Nether", "N")
-    elseif name:match("Seeds") or name:match("Seed") then
-        return name:gsub("Seed[s]?", "S")
-    elseif name:match("Log") then
-        return name:gsub("Log", "L")
-    else
-        return name:match("^[^ ]+") or name
-    end
-end
+    drawHeader(" Storage Overview ")
+    drawSeparator(2)
 
--- Shorten long text to fit within a box
-function dynamicallyShorten(text, maxWidth)
-    while #text > maxWidth do
-        if text:find(" ") then
-            firstWord = text:match("^[^ ]+")
-            rest = text:match(" .+") or ""
+    local scrollOffset = 0
+    local visibleRows = h - 4  -- Ensure footer space is not overwritten
 
-            if firstWord and #firstWord > 2 then
-                text = string.sub(firstWord, 1, #firstWord - 1) .. rest
-            else
-                text = string.sub(text, 1, #text - 1)
+    while true do
+		term.redirect(topMonitor)
+        rsitems = rs.listItems()  -- Refresh items every loop
+        local filteredItems = {}
+
+        for _, item in pairs(rsitems) do
+            if item.amount >= 32 then
+                table.insert(filteredItems, item)
             end
-        else
-            if #text > 2 then
-                text = string.sub(text, 1, #text - 1)
-            else
+        end
+        table.sort(filteredItems, function(a, b) return a.amount > b.amount end)
+
+        term.setBackgroundColor(backgroundColor)
+        term.clear()
+        drawHeader(" Storage Overview ")
+        drawSeparator(2)
+        drawFooter()
+
+        local y = 3
+        for i = 1 + scrollOffset, #filteredItems + scrollOffset do
+            local index = ((i - 1) % #filteredItems) + 1  -- Loop smoothly
+            if y < h then  -- Ensure rows stop before footer
+                drawItemRow(y, filteredItems[index].displayName, filteredItems[index].amount)
+            end
+            y = y + 1
+            if y >= h then  -- Stop drawing when footer is reached
                 break
             end
         end
-    end
-    return text
-end
 
--- Draw item box
-function drawBox(x, y, width, height, innerColor, borderColor)
-    paintutils.drawFilledBox(x - 1, y - 1, x + width, y + height, borderColor)
-    paintutils.drawFilledBox(x, y, x + width - 2, y + height - 2, innerColor)
-end
+        drawFooter()
 
--- Print left-aligned text in the box
-function printLeft(x, y, text, color)
-    displayText = dynamicallyShorten(text, boxWidth - 2)
-    term.setTextColor(color)
-    term.setCursorPos(x + 1, y)
-    term.write(displayText)
-end
+        sleep(0.35)  -- Faster scroll speed
+        scrollOffset = scrollOffset + 1
 
--- Display item in fullscreen with large canvas text
-function displayFullScreen(item)
-    term.setBackgroundColor(colors.black)
-    term.clear()
-
-    -- Draw full-screen box
-    drawBox(1, 1, w, h - 1, colors.lightGray, colors.green)
-
-    -- Determine text color based on item count
-    local textColor
-    if item.amount > 5000 then
-        textColor = colors.red
-    elseif item.amount > 2000 then
-        textColor = colors.orange
-    else
-        textColor = colors.white
-    end
-
-    -- Draw item name in large text
-    centerX = math.floor(w / 4)
-    centerY = math.floor(h / 4)
-
-    -- Draw item count below
-    drawLargeText(centerX - 2, centerY, tostring(item.amount), 2, textColor)
-
-    -- Print exit instruction at the bottom
-    term.setCursorPos(math.floor(w / 2) - 10, h - 3)
-    term.setTextColor(colors.white)
-    term.write("Tap anywhere to return")
-end
-
-function scrollTicker(lowestItems)
-    local tickerText = ""
-    for _, item in ipairs(lowestItems) do
-        tickerText = tickerText .. shortenItemName(item.displayName) .. ":" .. item.amount .. "  "
-    end
-
-    local pos = 1
-    while true do
-        term.setCursorPos(1, h)
-        term.clearLine()
-        term.setBackgroundColor(colors.green)
-        term.setTextColor(colors.white)  -- Force ticker text to be white
-        term.write(string.sub(tickerText, pos, pos + w))
-
-        pos = pos + 1
-        if pos > #tickerText then
-            pos = 1
-        end
-        sleep(0.2)
+		drawBattery()
+        drawItemGraph()
     end
 end
 
--- Detect which box was clicked
-function detectClick(x, y)
-    local boxX = math.floor((x - 2) / boxWidth) + 1
-    local boxY = math.floor((y - 2) / boxHeight)
-    local index = (boxY * boxesPerRow) + boxX
-    return index
+-- Main execution loop
+function refreshDisplay()
+    calculateScaling()
+    displayList()
 end
 
-calculateScaling()
-
-parallel.waitForAny(
-    function()
-        filteredItems = {}
-        local refreshTimer = os.startTimer(5)  -- Start a timer for auto-refresh
-        while true do
-            term.setBackgroundColor(colors.green)
-            term.clear()
-            term.setCursorPos(1, 1)
-            rsitems = rs.listItems()
-
-            filteredItems = {}  -- Rebuild filtered list each refresh
-            for _, item in pairs(rsitems) do
-                if item.amount >= 32 then
-                    table.insert(filteredItems, item)
-                end
-            end
-
-            table.sort(filteredItems, function(a, b)
-                return a.amount > b.amount
-            end)
-
-            -- Display grid or zoomed item
-            if selectedItem then
-                displayFullScreen(selectedItem)
-            else
-                for i, item in ipairs(filteredItems) do
-                    col = ((i - 1) % boxesPerRow) * boxWidth + 2
-                    row = math.floor((i - 1) / boxesPerRow) * boxHeight + 2
-
-                    if row + boxHeight > h - 1 then
-                        break
-                    end
-
-                    -- Color logic for counts
-                    local textColor
-                    if item.amount > 5000 then
-                        textColor = colors.red
-                    elseif item.amount > 2000 then
-                        textColor = colors.orange
-                    else
-                        textColor = colors.white
-                    end
-
-                    drawBox(col, row, boxWidth, boxHeight, colors.lightGray, colors.green)
-                    printLeft(col, row + 1, shortenItemName(item.displayName), textColor)
-                    printLeft(col, row + 3, tostring(item.amount), textColor)
-                end
-            end
-
-            -- Wait for touch or timer event
-            local event, param1, param2, param3 = os.pullEvent()
-
-            if event == "monitor_touch" then
-                local index = detectClick(param2, param3)
-                if selectedItem then
-                    selectedItem = nil
-                elseif filteredItems[index] then
-                    selectedItem = filteredItems[index]
-                end
-            elseif event == "timer" and param1 == refreshTimer then
-                -- Timer event: refresh the grid and restart the timer
-                refreshTimer = os.startTimer(5)
-            end
-        end
-    end,
-    function()
-        while true do
-            if #filteredItems > 0 then
-                scrollTicker(filteredItems)
-            else
-                sleep(1)
-            end
-        end
-    end
-)
-
+-- Start display
+refreshDisplay()
