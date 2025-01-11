@@ -23,12 +23,9 @@ end
 
 -- Main loop to receive messages and update the monitor
 while true do
-    local senderID, message = rednet.receive("monitoring")
-    local time = textutils.formatTime(os.time(), true)
-    local formattedMessage = "[" .. time .. "] " .. tostring(message)
 
     -- Add the new message to the list
-    table.insert(messages, "From " .. senderID .. ": " .. formattedMessage)
+    table.insert(messages, "From " .. senderID .. ": " .. message)
 
     -- Remove oldest messages if exceeding maxMessages
     if #messages > maxMessages then
