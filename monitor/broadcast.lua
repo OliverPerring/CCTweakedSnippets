@@ -1,10 +1,18 @@
-local moduleName = "Your Module Name Here" -- Replace with the desired module name
+-- Open rednet on the "bottom" side
+rednet.open("bottom")
 
-function broadcastStatus(message)
-    rednet.open("bottom")
-    local time = os.time()
-    rednet.broadcast("[" .. textutils.formatTime(time, true) .. "] " .. message, "monitoring")
-    print("Broadcasted: [" .. textutils.formatTime(time, true) .. "] " .. message)
+-- Function to broadcast a structured packet
+local function broadcastPacket(senderName, messageType, messageBody)
+    local packet = {
+        sender = senderName,
+        type = messageType,
+        body = messageBody,
+    }
+    rednet.broadcast(packet, "monitoring")
+    print("Broadcasted packet: ", textutils.serialize(packet))
 end
 
-broadcastStatus("Module Loaded [" .. moduleName .. "]")
+-- Example usage
+broadcastPacket("Test1", "Info", "System started")
+broadcastPacket("Test2", "Warning", "Power usage has gone negative")
+broadcastPacket("Test3", "Error", "System failure detected!")
