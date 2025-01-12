@@ -10,7 +10,7 @@ end
 monitor.setTextScale(0.5) -- Adjust text scale for better resolution
 monitor.clear()
 monitor.setCursorPos(1, 1)
-term.redirect(monitor)
+term.redirect(monitor) 
 
 -- Monitor dimensions
 local monitorWidth, monitorHeight = monitor.getSize()
