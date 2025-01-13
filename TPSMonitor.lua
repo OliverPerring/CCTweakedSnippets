@@ -12,7 +12,7 @@ end
 
 monitor.setTextScale(1)
 monitor.clear()
-term.redirect(Monitor)
+term.redirect(monitor)
 
 -- Function to draw a horizontal bar using paintutils
 local function drawHorizontalBar(x, y, width, percentage, color)
