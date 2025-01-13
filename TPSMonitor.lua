@@ -12,28 +12,50 @@ end
 
 monitor.setTextScale(1)
 monitor.clear()
+term.redirect(Monitor)
+
+-- Function to draw a horizontal bar using paintutils
+local function drawHorizontalBar(x, y, width, percentage, color)
+    paintutils.drawLine(x, y, x + width - 1, y, colors.black) -- Clear the bar
+    local filledWidth = math.floor(width * percentage)
+    if filledWidth > 0 then
+        paintutils.drawLine(x, y, x + filledWidth - 1, y, color)
+    end
+end
 
 -- Function to display TPS
 local function displayTPS(tps)
     monitor.clear()
     monitor.setCursorPos(1, 1)
+    monitor.setTextColor(colors.white)
     monitor.write("Minecraft TPS Monitor")
+
     monitor.setCursorPos(1, 3)
     monitor.write("Current TPS: " .. string.format("%.2f", tps))
 
+    local status, color
     if tps >= 19.0 then
-        monitor.setCursorPos(1, 5)
-        monitor.write("Status: Excellent")
+        status = "Excellent"
+        color = colors.green
     elseif tps >= 15.0 then
-        monitor.setCursorPos(1, 5)
-        monitor.write("Status: Good")
+        status = "Good"
+        color = colors.yellow
     elseif tps >= 10.0 then
-        monitor.setCursorPos(1, 5)
-        monitor.write("Status: Fair")
+        status = "Fair"
+        color = colors.orange
     else
-        monitor.setCursorPos(1, 5)
-        monitor.write("Status: Poor")
+        status = "Poor"
+        color = colors.red
     end
+
+    monitor.setCursorPos(1, 5)
+    monitor.write("Status: " .. status)
+
+    -- Draw the horizontal bar to visually represent TPS
+    local barWidth = 30 -- Adjust the width to fit your monitor size
+    local x, y = 2, 7 -- Starting position of the bar
+    local percentage = math.min(tps / 20, 1)
+    drawHorizontalBar(x, y, barWidth, percentage, color)
 end
 
 -- Function to fetch TPS
