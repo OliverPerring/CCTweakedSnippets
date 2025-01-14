@@ -11,7 +11,7 @@ Uses an RS Bridge to monitor items in Refined Storage.
 Utilizes a stressometer to monitor stress levels in Create setups.
 
 ### Monitoring TPS
-Executes the `/tps` command (Forge) to monitor server ticks per second.
+Executes the `/tps` command (Forge) to monitor server ticks per second. Requires a command computer
 
 ### Monitoring Induction Mekanism Energy Storage
 Originally created by [obroadbent](https://www.reddit.com/r/ComputerCraft/comments/1c9uv3u/induction_matrix_graphs_mekanism_computercraft/). Monitors energy storage levels in Mekanism's induction matrix.
